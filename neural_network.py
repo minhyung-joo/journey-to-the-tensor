@@ -17,6 +17,7 @@ class Neuron():
 class Layer():
     def __init__(self):
         self.neurons = []
+        self.activation = "relu"
 
     def init_weights(self, prev_dimension, dimension):
         self.neurons = []
@@ -24,6 +25,9 @@ class Layer():
             neuron = Neuron()
             neuron.init_weights(prev_dimension)
             self.neurons.append(neuron)
+
+    def set_activation(self, activation):
+        self.activation = activation
     
     def print_shape(self):
         for neuron in self.neurons:
@@ -36,9 +40,15 @@ class Layer():
         results = np.matmul(matrix, values)
         activations = []
         for result in results:
-            activations.append(np.tanh(result))
+            activations.append(self.activation_function(result))
 
         return activations
+
+    def activation_function(self, value):
+        if self.activation == "tanh":
+            return np.tanh(value)
+        elif self.activation == "relu":
+            return np.maximum(0, value)
 
 class NeuralNetwork():
     def __init__(self):
@@ -56,13 +66,22 @@ class NeuralNetwork():
             layer.init_weights(shape[i], shape[i + 1])
             self.layers.append(layer)
 
-        for row in x:
+        self.layers[-1].set_activation("tanh")
+
+        for i in range(len(x)):
+            row = x[i]
+            target = y[i]
             activations = self.layers[0].feed_forward(row)
-            for i in range(len(self.layers) - 1):
-                activations = self.layers[i + 1].feed_forward(activations)
+            for j in range(len(self.layers) - 1):
+                activations = self.layers[j + 1].feed_forward(activations)
             
-            print(activations)
-    
+            diff = 0
+            for j in range(len(activations)):
+                diff = diff + (activations[j] - target[j])**2
+            loss = diff / 2
+        
+        # Implement backpropagation
+
     def print_shape(self):
         for i in range(len(self.layers)):
             print ("Layer", i + 1)
