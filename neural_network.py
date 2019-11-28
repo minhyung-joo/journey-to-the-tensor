@@ -14,10 +14,13 @@ class Neuron():
     def get_weights(self):
         return self.weights
 
+    def get_dimension(self):
+        return len(self.weights)
+
 class Layer():
     def __init__(self):
         self.neurons = []
-        self.activation = "relu"
+        self.activation = "sigmoid"
 
     def init_weights(self, prev_dimension, dimension):
         self.neurons = []
@@ -36,9 +39,8 @@ class Layer():
     def feed_forward(self, values):
         # Vectorize
         matrix = [x.get_weights() for x in self.neurons]
-        values = [1] + values
         results = np.matmul(matrix, values)
-        activations = []
+        activations = [1]
         for result in results:
             activations.append(self.activation_function(result))
 
@@ -49,6 +51,14 @@ class Layer():
             return np.tanh(value)
         elif self.activation == "relu":
             return np.maximum(0, value)
+        elif self.activation == "sigmoid":
+            return 1 / (1 + np.exp(-value))
+    
+    def get_dimension(self):
+        return (len(self.neurons), self.neurons[0].get_dimension())
+
+    def get_weights(self):
+        return [x.get_weights() for x in self.neurons]
 
 class NeuralNetwork():
     def __init__(self):
@@ -66,21 +76,38 @@ class NeuralNetwork():
             layer.init_weights(shape[i], shape[i + 1])
             self.layers.append(layer)
 
-        self.layers[-1].set_activation("tanh")
+        grad_table = []
+        for i in range(len(self.layers)):
+            grad_table.append(np.zeros(self.layers[i].get_dimension()))
 
         for i in range(len(x)):
             row = x[i]
             target = y[i]
-            activations = self.layers[0].feed_forward(row)
-            for j in range(len(self.layers) - 1):
-                activations = self.layers[j + 1].feed_forward(activations)
+            activations = [[1] + row]
+            for j in range(len(self.layers)):
+                activations.append(self.layers[j].feed_forward(activations[j]))
+            
+            activations[-1] = activations[-1][1:]
             
             diff = 0
-            for j in range(len(activations)):
-                diff = diff + (activations[j] - target[j])**2
+            for j in range(len(activations[-1])):
+                diff = diff + (activations[-1][j] - target[j])**2
             loss = diff / 2
-        
-        # Implement backpropagation
+
+            delta = np.subtract(activations[-1], target)
+            for k in range(len(grad_table[-1])):
+                delta[k] = delta[k] * activations[-1][k] * (1 - activations[-1][k])
+
+            for j in range(len(grad_table) - 1, -1, -1):
+                newDelta = []
+                for k in range(len(grad_table[j])):
+                    for l in range(len(self.layers[j].get_weights()[k])):
+                        grad_table[j][k][l] = grad_table[j][k][l] + delta[k] * self.layers[j].get_weights()[k][l]
+                    for l in range(len(activations[j])):
+                        newDelta.append(delta[k]*activations[j][l]*(1 - activations[j][l]))
+                delta = newDelta[1:]
+            
+            print (grad_table)
 
     def print_shape(self):
         for i in range(len(self.layers)):
