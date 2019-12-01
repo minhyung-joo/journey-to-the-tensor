@@ -101,8 +101,8 @@ class NeuralNetwork():
                 cost = cost + sum([x[0]**2 for x in np.subtract(activations[-1], target)])
 
                 activations_prime = np.subtract(np.ones((len(activations[-1]), 1)), activations[-1])
-                #delta = np.multiply(np.multiply(np.subtract(activations[-1], target), activations[-1]), activations_prime)
-                delta = np.subtract(activations[-1], target)
+                delta = np.multiply(np.multiply(np.subtract(activations[-1], target), activations[-1]), activations_prime)
+                #delta = np.subtract(activations[-1], target)
 
                 for j in range(len(grad_table) - 1, -1, -1):
                     grad_table[j] = np.add(grad_table[j], np.matmul(delta, np.transpose(activations[j])))
@@ -112,6 +112,15 @@ class NeuralNetwork():
             
             cost = cost / len(x)
             print (cost)
+
+            # Regularization
+            for l in range(len(grad_table)):
+                for i in range(len(grad_table[l])):
+                    for j in range(len(grad_table[l][i])):
+                        if j == 0:
+                            grad_table[l][i][j] = grad_table[l][i][j]/len(x)
+                        else:
+                            grad_table[l][i][j] = grad_table[l][i][j]/len(x) + self.layers[l].get_weights()[i][j]/len(x)
 
             for j in range(len(self.layers)):
                 self.layers[j].set_weights(np.subtract(self.layers[j].get_weights(), grad_table[j]))
