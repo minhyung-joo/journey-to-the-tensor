@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 class Neuron():
     def __init__(self):
@@ -16,6 +17,9 @@ class Neuron():
 
     def get_dimension(self):
         return len(self.weights)
+    
+    def set_weights(self, weights):
+        self.weights = weights
 
 class Layer():
     def __init__(self):
@@ -40,9 +44,9 @@ class Layer():
         # Vectorize
         matrix = [x.get_weights() for x in self.neurons]
         results = np.matmul(matrix, values)
-        activations = [1]
+        activations = [[1]]
         for result in results:
-            activations.append(self.activation_function(result))
+            activations.append([self.activation_function(result[0])])
 
         return activations
 
@@ -59,12 +63,16 @@ class Layer():
 
     def get_weights(self):
         return [x.get_weights() for x in self.neurons]
+    
+    def set_weights(self, weights):
+        for i in range(len(self.neurons)):
+            self.neurons[i].set_weights(weights[i])
 
 class NeuralNetwork():
     def __init__(self):
         self.layers = []
     
-    def train(self, x, y, shape=[]):
+    def train(self, x, y, shape=[], epochs=10):
         if len(shape) == 0:
             shape = [len(x[0]), len(x[0]), len(y[0])]
 
@@ -76,43 +84,51 @@ class NeuralNetwork():
             layer.init_weights(shape[i], shape[i + 1])
             self.layers.append(layer)
 
-        grad_table = []
-        for i in range(len(self.layers)):
-            grad_table.append(np.zeros(self.layers[i].get_dimension()))
+        for _ in range(epochs):
+            grad_table = []
+            for i in range(len(self.layers)):
+                grad_table.append(np.zeros(self.layers[i].get_dimension()))
 
-        for i in range(len(x)):
-            row = x[i]
-            target = y[i]
-            activations = [[1] + row]
+            cost = 0
+            for i in range(len(x)):
+                row = x[i]
+                target = y[i]
+                activations = [np.transpose([np.concatenate(([1], row))])]
+                for j in range(len(self.layers)):
+                    activations.append(self.layers[j].feed_forward(activations[j]))
+                
+                activations[-1] = activations[-1][1:]
+                cost = cost + sum([x[0]**2 for x in np.subtract(activations[-1], target)])
+
+                activations_prime = np.subtract(np.ones((len(activations[-1]), 1)), activations[-1])
+                #delta = np.multiply(np.multiply(np.subtract(activations[-1], target), activations[-1]), activations_prime)
+                delta = np.subtract(activations[-1], target)
+
+                for j in range(len(grad_table) - 1, -1, -1):
+                    grad_table[j] = np.add(grad_table[j], np.matmul(delta, np.transpose(activations[j])))
+                    activations_prime = np.subtract(np.ones((len(activations[j]), 1)), activations[j])
+                    weight_times_delta = np.matmul(np.transpose(self.layers[j].get_weights()), delta)
+                    delta = np.multiply(np.multiply(weight_times_delta, activations[j]), activations_prime)[1:]
+            
+            cost = cost / len(x)
+            print (cost)
+
             for j in range(len(self.layers)):
-                activations.append(self.layers[j].feed_forward(activations[j]))
-            
-            activations[-1] = activations[-1][1:]
-            
-            diff = 0
-            for j in range(len(activations[-1])):
-                diff = diff + (activations[-1][j] - target[j])**2
-            loss = diff / 2
-
-            delta = np.subtract(activations[-1], target)
-            for k in range(len(grad_table[-1])):
-                delta[k] = delta[k] * activations[-1][k] * (1 - activations[-1][k])
-
-            for j in range(len(grad_table) - 1, -1, -1):
-                newDelta = []
-                for k in range(len(grad_table[j])):
-                    for l in range(len(self.layers[j].get_weights()[k])):
-                        grad_table[j][k][l] = grad_table[j][k][l] + delta[k] * self.layers[j].get_weights()[k][l]
-                    for l in range(len(activations[j])):
-                        newDelta.append(delta[k]*activations[j][l]*(1 - activations[j][l]))
-                delta = newDelta[1:]
-            
-            print (grad_table)
+                self.layers[j].set_weights(np.subtract(self.layers[j].get_weights(), grad_table[j]))
 
     def print_shape(self):
         for i in range(len(self.layers)):
             print ("Layer", i + 1)
             self.layers[i].print_shape()
 
+train_data = pd.read_csv("train.csv")
+prices = train_data["SalePrice"]
+#print (np.median(prices), np.min(prices), np.max(prices), np.mean(prices))
+cutoff_price = np.median(prices) # We will classify based on the price level
+train_data = train_data[["LotArea", "OverallQual", "OverallCond", "YearBuilt", "YearRemodAdd", "TotalBsmtSF", "SalePrice"]]
+train_data = train_data.values
+y = [[1 if t[-1] > cutoff_price else 0] for t in train_data]
+x = [t[:-1] for t in train_data]
+
 nn = NeuralNetwork()
-nn.train([[3, 5, 3]], [[1]])
+nn.train(x, y)
