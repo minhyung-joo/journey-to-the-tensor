@@ -3,6 +3,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
+def generate_features(data):
+    features = data[["close", "low", "high"]]
+    features.index = data['date']
+    
+    dataset = []
+    for i in range(1, len(features)):
+        row = []
+        row.append(((features.iat[i, 0] / features.iat[i - 1, 0]) - 1) * 100)
+        row.append(features.iat[i, 1] / features.iat[i, 0])
+        row.append(features.iat[i, 2] / features.iat[i, 0])
+        dataset.append(row)
+    
+    return np.array(dataset)
+
 def multivariate_data(dataset, target, start_index, end_index, history_size, target_size, step, single_step=False):
     data = []
     labels = []
@@ -55,23 +69,19 @@ for sector in sectors[:1]:
     price_hist = price_data.loc[price_data['GICS Sector'] == sector]
     compiled_x = np.zeros((1, 100, 3))
     compiled_y = np.zeros((1,))
+    trained_symbols = []
     for symbol in symbols:
         stock_price_hist = price_hist.loc[price_hist['symbol'] == symbol]
+        
         if len(stock_price_hist) > 0:
             stock_price_hist.drop_duplicates("date")
-            features = stock_price_hist[["close", "low", "high"]]
-            features.index = stock_price_hist['date']
-            
-            benchmark = features.iat[0, 0]
-            normalizer = normalize(benchmark)
-            features["close"] = features["close"].map(normalizer)
-            features["low"] = features["low"].map(normalizer)
-            features["high"] = features["high"].map(normalizer)
-            dataset = features.values
-
-            x, y = multivariate_data(dataset, dataset[:,0], 0, None, past_history, future_target, STEP, True)
-            compiled_x = np.concatenate((compiled_x, x))
-            compiled_y = np.concatenate((compiled_y, y))
+            dataset = generate_features(stock_price_hist)
+            vol = np.std(dataset[:, 0])
+            if vol >= 1.5 and vol <= 2.5:
+                x, y = multivariate_data(dataset, dataset[:,0], 0, None, past_history, future_target, STEP, True)
+                compiled_x = np.concatenate((compiled_x, x))
+                compiled_y = np.concatenate((compiled_y, y))
+                trained_symbols.append(symbol)
     
     train_data_single = tf.data.Dataset.from_tensor_slices((compiled_x, compiled_y))
     train_data_single = train_data_single.cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).repeat()
@@ -79,39 +89,11 @@ for sector in sectors[:1]:
     
     single_step_model = tf.keras.models.Sequential()
     single_step_model.add(tf.keras.layers.LSTM(32, input_shape=x.shape[-2:]))
+    single_step_model.add(tf.keras.layers.LSTM(32, input_shape=(1, 32)))
     single_step_model.add(tf.keras.layers.Dense(1))
     single_step_model.compile(optimizer=tf.keras.optimizers.RMSprop(), loss='mae')
 
     history = single_step_model.fit(train_data_single, epochs=EPOCHS, steps_per_epoch=EVALUATION_INTERVAL)
 
+    print (trained_symbols)
     single_step_model.save_weights('./financial_weights')
-"""
-for symbol in symbols[:1]:
-    price_hist = price_data.loc[price_data['symbol'] == symbol]
-    price_hist.drop_duplicates("date")
-    features = price_hist[["close", "low", "high"]]
-    features.index = price_hist['date']
-    
-    benchmark = features.iat[0, 0]
-    normalizer = normalize(benchmark)
-    features["close"] = features["close"].map(normalizer)
-    features["low"] = features["low"].map(normalizer)
-    features["high"] = features["high"].map(normalizer)
-    dataset = features.values
-
-    x, y = multivariate_data(dataset, dataset[:,0], 0, None, past_history, future_target, STEP, True)
-
-    train_data_single = tf.data.Dataset.from_tensor_slices((x, y))
-    train_data_single = train_data_single.cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).repeat()
-    input_shape = None
-    
-    single_step_model = tf.keras.models.Sequential()
-    single_step_model.add(tf.keras.layers.LSTM(32, input_shape=x.shape[-2:]))
-    single_step_model.add(tf.keras.layers.Dense(1))
-    single_step_model.compile(optimizer=tf.keras.optimizers.RMSprop(), loss='mae')
-
-    history = single_step_model.fit(train_data_single, epochs=EPOCHS, steps_per_epoch=EVALUATION_INTERVAL)
-    for x, y in train_data_single.take(1):
-        predictions = single_step_model.predict(x)
-        print (predictions * benchmark)
-"""
