@@ -34,4 +34,14 @@ with Entrez.efetch(
         protein = my_seq.translate()
         print(protein)
 
-        
+from Bio.Blast import NCBIWWW
+from Bio.Blast import NCBIXML
+result_handle = NCBIWWW.qblast("blastn", "nt", "8332116")
+blast_record = NCBIXML.read(result_handle)
+E_VALUE_THRESH = 0.04
+for alignment in blast_record.alignments:
+    for hsp in alignment.hsps:
+        if hsp.expect < E_VALUE_THRESH:
+            print("****Alignment****")
+            print("sequence:", alignment.title)
+            print("length:", alignment.length)
